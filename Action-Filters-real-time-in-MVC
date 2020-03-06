@@ -1,0 +1,106 @@
+ 
+ Placed the [AuthFilter(Rolename = "1")] above ActionResult() method and use below code
+ ---------------------
+ public class AuthFilter : ActionFilterAttribute
+    {
+        public string Rolename { get; set; }
+        public override void OnActionExecuting(ActionExecutingContext filterContext)
+        {
+            base.OnActionExecuting(filterContext);
+            var descriptor = filterContext.ActionDescriptor;
+            var actionName = descriptor.ActionName;
+            if (filterContext.HttpContext.Session.Contents["UserType"] != null)
+            {
+                filterContext.Controller.ViewBag.Usertype = filterContext.HttpContext.Session.Contents["UserType"];
+                filterContext.Controller.ViewBag.Username = filterContext.HttpContext.Session.Contents["UserName"];
+
+                //  string[] users = new string[] { };
+                // string[] roles = new string[] { };
+
+                // get the roles / users for the group from your db or storage
+                // below is an example only
+                var db = new VAEAutomationToolEntities();
+               string role = filterContext.HttpContext.Session.Contents["UserType"].ToString();
+
+                //var user = filterContext.HttpContext.User;
+                //var userRoles = Roles.GetRolesForUser();
+
+                if (Rolename !=role && (string)filterContext.RouteData.Values["action"] != "ChangePassword")
+                {
+                    //return a not found result or redirect to an action
+                     filterContext.Result = new HttpNotFoundResult();
+                    if (!filterContext.HttpContext.Request.IsAjaxRequest())
+                    {
+                        filterContext.Controller.TempData["ValidationMessage"] = "You do not have permission to access this page. Please contact administrator.";
+                        filterContext.Result = new RedirectToRouteResult(
+                                           new RouteValueDictionary
+                                               {{"controller", "Login"}, {"action", "Logout"}});
+                    }
+                    else
+                    {
+                        filterContext.Result = new JsonResult
+                        {
+                            Data = new { success = false, errorMessage = "You do not have permission to access this page. Please contact administrator." },
+                            JsonRequestBehavior = JsonRequestBehavior.AllowGet
+                        };
+                    }
+                }
+
+               
+            }
+            else
+            {
+
+                if (!filterContext.HttpContext.Request.IsAjaxRequest())
+                {
+                    filterContext.Result = new RedirectToRouteResult(
+                                          new RouteValueDictionary
+                                              {{"controller", "Login"}, {"action", "Logout"}});
+                }
+                else
+                {
+                    filterContext.Result = new JsonResult
+                    {
+                        Data = new { Response = false, ErrorMessage = "Session expired." },
+                        JsonRequestBehavior = JsonRequestBehavior.AllowGet
+                    };
+                }
+            }
+        }
+    }
+
+    public class CustomExceptionFilter : FilterAttribute, IExceptionFilter
+    {
+        public void OnException(ExceptionContext filterContext)
+        {
+            if (filterContext.HttpContext.Request.IsAjaxRequest())
+           {
+                var errormessage = filterContext.Exception.Message;
+                filterContext.ExceptionHandled = true;
+                string errorMsg;
+                if (Convert.ToBoolean(Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["MailEnabled"])))
+                {
+                    ErrorLogMail(errormessage, "ErrorLog-PPT", out errorMsg);
+                }
+                filterContext.Result = new JsonResult
+                {
+                    Data = new { Response = false, error = filterContext.Exception.ToString(), ErrorMessage = "Internal server problem." },
+                    JsonRequestBehavior = JsonRequestBehavior.AllowGet
+                };
+            }
+            else
+            {
+                var errormessage = filterContext.Exception.Message;
+                string errorMsg;
+                if (Convert.ToBoolean(Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["MailEnabled"])))
+                {
+                    ErrorLogMail(errormessage, "ErrorLog-PPT", out errorMsg);
+                }
+                filterContext.Controller.TempData["ValidationMessage"] = "Internal server problem.";
+                filterContext.Result = new RedirectToRouteResult(
+               new RouteValueDictionary
+                   {{"controller", "Login"}, {"action", "Logout"}});
+                filterContext.ExceptionHandled = true;
+            }
+
+        }
